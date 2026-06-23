@@ -110,6 +110,8 @@ def classify(path: Path) -> list[str]:
 
     if name in MANIFEST_NAMES:
         tags.append("manifest")
+    if name == "Dockerfile":
+        tags.append("deployment")
     if name in CONFIG_HINTS or name.startswith(".github"):
         tags.append("config")
     if "test" in rel.lower() or "spec" in rel.lower():
@@ -137,11 +139,14 @@ def build_tree(files: list[dict[str, object]]) -> dict[str, object]:
     return tree
 
 
-def main() -> int:
-    args = parse_args()
-    root = Path(args.repo).resolve()
-    excludes = DEFAULT_EXCLUDES | set(args.exclude)
-
+def collect_inventory(
+    repo: str | Path,
+    *,
+    max_files: int = 5000,
+    exclude: list[str] | None = None,
+) -> dict[str, object]:
+    root = Path(repo).resolve()
+    excludes = DEFAULT_EXCLUDES | set(exclude or [])
     if not root.exists():
         raise SystemExit(f"Repo path does not exist: {root}")
 
@@ -172,7 +177,7 @@ def main() -> int:
                     "tags": classify(Path(rel)),
                 }
             )
-            if len(files) >= args.max_files:
+            if len(files) >= max_files:
                 truncated = True
                 break
         if truncated:
@@ -183,7 +188,7 @@ def main() -> int:
     interfaces = [item for item in files if "interface" in item["tags"]]
     deployments = [item for item in files if "deployment" in item["tags"]]
 
-    inventory = {
+    return {
         "repo": root.name,
         "root": str(root),
         "truncated": truncated,
@@ -201,6 +206,15 @@ def main() -> int:
         "files": files,
         "tree": build_tree(files[:500]),
     }
+
+
+def main() -> int:
+    args = parse_args()
+    inventory = collect_inventory(
+        args.repo,
+        max_files=args.max_files,
+        exclude=args.exclude,
+    )
 
     output = json.dumps(inventory, indent=2, sort_keys=True)
     if args.out:

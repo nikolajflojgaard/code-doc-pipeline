@@ -50,14 +50,19 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Split diagrams when more than 8-10 nodes or when one diagram mixes unrelated concerns.
    - See `references/diagram-patterns.md` for diagram selection and Mermaid patterns.
 
-6. Make the pipeline safe.
+6. Use the production CLI when the repo has no existing documentation generator.
+   - Run `python3 scripts/code_docs.py generate <repo>` to create/update baseline docs and Mermaid diagrams.
+   - Run `python3 scripts/code_docs.py check <repo>` in CI to fail when generated docs drift.
+   - Run `python3 scripts/code_docs.py review <repo>` when teams want a non-writing summary first.
+
+7. Make the pipeline safe.
    - In `generate` mode, write deterministic files and avoid timestamps unless needed.
-   - In `check` mode, regenerate into a temp directory and diff against committed docs.
+   - In `check` mode, regenerate deterministically and use git status/diff to detect documentation drift.
    - Fail only on meaningful docs drift, broken diagrams, missing required doc sections, or stale generated inventory.
    - Do not fail because of unrelated formatting churn.
    - Keep human-authored sections clearly separated from generated sections.
 
-7. Review for usefulness.
+8. Review for usefulness.
    - Remove obvious restatements of filenames.
    - Prefer short explanations tied to concrete code paths.
    - Link to source files, schemas, routes, config, migrations, and deployment files.
@@ -88,23 +93,24 @@ Adapt to the repo's existing conventions. Do not create parallel doc systems whe
 
 ## Pipeline Pattern
 
-Use a two-command pattern:
+Use the included CLI:
 
 ```bash
-# Regenerate docs locally or in a scheduled job
-code-docs generate
+# Regenerate docs locally or in a scheduled job.
+python3 scripts/code_docs.py generate .
 
-# CI check mode
-code-docs check
+# CI check mode.
+python3 scripts/code_docs.py check .
+
+# Non-writing summary mode.
+python3 scripts/code_docs.py review .
 ```
 
-If no dedicated CLI exists yet, implement the pipeline as a script wrapper around:
+For inventory only:
 
 ```bash
 python3 scripts/inventory_repo.py . --out docs/generated/code-doc-inventory.json
 ```
-
-Then have the agent or repo-specific doc generator update Markdown and Mermaid artifacts from the inventory.
 
 ## Quality Bar
 
