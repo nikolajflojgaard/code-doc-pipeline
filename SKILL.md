@@ -7,6 +7,8 @@ description: Generate maintainable documentation from codebases, including archi
 
 Use this skill to turn a repository into useful, reviewable documentation that can run in CI/CD. Optimize for docs that help engineers operate and change the system, not broad generated noise.
 
+Diagrams are a default output, not a bonus. For any non-trivial codebase, produce Mermaid diagrams as naturally as prose: context/flow diagrams for structure, sequence diagrams for runtime behavior, data-flow diagrams for ownership and movement, and deployment diagrams when infrastructure is visible.
+
 ## Workflow
 
 1. Establish the documentation contract.
@@ -30,14 +32,20 @@ Use this skill to turn a repository into useful, reviewable documentation that c
 
 4. Generate docs in stable layers.
    - Repository overview: purpose, stack, how to run/test/build, key directories.
-   - Architecture: containers/components, data flow, runtime dependencies, trust boundaries.
+   - Architecture: containers/components, data flow, runtime dependencies, trust boundaries, and diagrams.
    - API/interface docs: routes, commands, events, schemas, examples, auth expectations.
    - Operational docs: config, env vars, jobs, deployment, observability, failure/recovery notes.
    - Decision docs: ADR candidates only when the code reveals meaningful architectural decisions.
 
-5. Generate diagrams as text-first artifacts.
+5. Generate diagrams as text-first artifacts by default.
    - Prefer Mermaid diagrams committed as Markdown code blocks or `.mmd` files.
+   - Create at least one structure diagram and one behavior diagram unless the repo is trivial.
    - Use C4-like levels: context, container, component, sequence, data flow, deployment.
+   - Default diagram set for a service or app:
+     - `context.mmd`: users, system, external dependencies.
+     - `container-or-flow.mmd`: main runtime parts and their connections.
+     - `critical-sequence.mmd`: one important request, job, event, or workflow.
+     - `data-flow.mmd`: data ownership and movement when persistence or integrations exist.
    - Keep diagrams small enough to review in a PR.
    - Split diagrams when more than 8-10 nodes or when one diagram mixes unrelated concerns.
    - See `references/diagram-patterns.md` for diagram selection and Mermaid patterns.
@@ -68,8 +76,10 @@ docs/
   interfaces.md
   diagrams/
     context.mmd
-    container.mmd
-    critical-flow.mmd
+    container-or-flow.mmd
+    critical-sequence.mmd
+    data-flow.mmd
+    deployment.mmd
   generated/
     code-doc-inventory.json
 ```
@@ -102,7 +112,7 @@ Generated documentation must:
 
 - explain what the system does and where to start reading
 - expose important dependencies and boundaries
-- show at least one useful diagram for non-trivial systems
+- show useful Mermaid diagrams for both structure and behavior in non-trivial systems
 - document how to build, test, deploy, configure, and observe the system when the repo contains that information
 - separate facts proven by code from assumptions
 - be stable enough that repeated runs do not create meaningless diffs
@@ -112,6 +122,7 @@ Reject documentation that:
 - dumps directory trees without explaining ownership or behavior
 - rewrites every function into prose
 - hides uncertainty
+- skips diagrams for systems where a visual map would clarify structure or behavior
 - creates one massive diagram that nobody can read
 - leaks secrets or environment-specific private values
 - makes CI brittle with timestamps, random ordering, or formatting churn

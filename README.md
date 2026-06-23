@@ -7,7 +7,8 @@ The point is not to dump a repo tree into Markdown. The point is to keep documen
 ## What It Helps With
 
 - Generate architecture documentation from source code and config
-- Produce Mermaid/C4-style diagrams that can live in Git
+- Produce Mermaid/C4-style diagrams as a default output, not an afterthought
+- Create sequence, flow, data-flow, context, component, and deployment diagrams where the code supports them
 - Document APIs, events, jobs, modules, deployment surfaces, and config
 - Separate observed facts from inferred behavior
 - Add pipeline checks so documentation drift is visible in pull requests
@@ -54,7 +55,7 @@ python3 ~/.codex/skills/code-doc-pipeline/scripts/inventory_repo.py . --out docs
 Then ask the agent to use the skill to turn the inventory plus source code into docs:
 
 ```text
-Use $code-doc-pipeline to create docs/README.md, docs/architecture.md, docs/interfaces.md, docs/operations.md, and Mermaid diagrams for this repo. Preserve existing human-written docs where possible.
+Use $code-doc-pipeline to create docs/README.md, docs/architecture.md, docs/interfaces.md, docs/operations.md, and Mermaid context, flow, sequence, and data-flow diagrams for this repo. Preserve existing human-written docs where possible.
 ```
 
 ## CI Example
@@ -88,7 +89,8 @@ Good generated documentation should:
 
 - explain system ownership and boundaries
 - link back to code, config, tests, schemas, and deployment files
-- show diagrams that are small enough to review in pull requests
+- include Mermaid diagrams that are small enough to review in pull requests
+- show both structure and behavior when the codebase is non-trivial
 - mark uncertainty instead of inventing facts
 - keep generated sections deterministic
 - avoid leaking secrets or private environment values
