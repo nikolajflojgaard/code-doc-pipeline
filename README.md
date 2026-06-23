@@ -31,6 +31,8 @@ code-doc-pipeline/
   scripts/
     code_docs.py
     inventory_repo.py
+  examples/
+    tiny-api/
   tests/
     test_code_docs.py
 ```
@@ -94,11 +96,31 @@ python3 scripts/code_docs.py check .
 # Non-writing summary mode
 python3 scripts/code_docs.py review .
 
+# Lightweight Mermaid validation
+python3 scripts/code_docs.py validate-diagrams .
+
 # Inventory only
 python3 scripts/inventory_repo.py . --out docs/generated/code-doc-inventory.json
 ```
 
+## Configuration
+
+Add `code-docs.yml` at the repository root:
+
+```yaml
+docs_dir: docs
+max_files: 5000
+exclude:
+  - node_modules
+  - dist
+  - generated
+```
+
+The parser intentionally supports a small YAML subset so the tool stays dependency-free.
+
 ## CI Example
+
+The workflow can be strict with `check`, advisory with `review`, or both. For pull requests in the same repository, the example below keeps one sticky docs review comment updated instead of adding a new comment every run.
 
 ```yaml
 name: Code documentation
@@ -106,6 +128,10 @@ name: Code documentation
 on:
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   docs:
@@ -117,9 +143,40 @@ jobs:
           python-version: "3.12"
       - name: Check documentation drift
         run: python3 .codex/skills/code-doc-pipeline/scripts/code_docs.py check .
+      - name: Add docs review summary
+        if: always()
+        run: python3 .codex/skills/code-doc-pipeline/scripts/code_docs.py review . --github-summary --report /tmp/code-doc-review.md
+      - name: Update PR documentation comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- code-doc-pipeline:review -->'
+          body_file=/tmp/code-doc-review-with-marker.md
+          printf '%s\n\n' "$marker" > "$body_file"
+          cat /tmp/code-doc-review.md >> "$body_file"
+
+          comment_id="$(
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" \
+              | head -n 1
+          )"
+
+          if [ -n "$comment_id" ]; then
+            body="$(cat "$body_file")"
+            gh api "repos/$REPO/issues/comments/$comment_id" --method PATCH --field body="$body"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body_file"
+          fi
 ```
 
 In a mature setup, wrap this in your own `code-docs generate` and `code-docs check` commands so teams do not need to remember skill paths.
+
+## Example
+
+See [`examples/tiny-api`](examples/tiny-api) for a small Express-style API and generated documentation output.
 
 ## Documentation Philosophy
 

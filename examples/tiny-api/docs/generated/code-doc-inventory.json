@@ -1,0 +1,98 @@
+{
+  "counts": {
+    "deployments": 1,
+    "entrypoints": 0,
+    "files": 3,
+    "frameworks": 1,
+    "interfaces": 0,
+    "manifests": 2,
+    "routes": 2
+  },
+  "deployments": [
+    {
+      "path": "Dockerfile",
+      "size": 98,
+      "suffix": "",
+      "tags": [
+        "deployment",
+        "manifest"
+      ]
+    }
+  ],
+  "entrypoints": [],
+  "files": [
+    {
+      "path": "Dockerfile",
+      "size": 98,
+      "suffix": "",
+      "tags": [
+        "deployment",
+        "manifest"
+      ]
+    },
+    {
+      "path": "package.json",
+      "size": 93,
+      "suffix": ".json",
+      "tags": [
+        "manifest"
+      ]
+    },
+    {
+      "path": "src/server.ts",
+      "size": 231,
+      "suffix": ".ts",
+      "tags": []
+    }
+  ],
+  "frameworks": [
+    {
+      "name": "Express",
+      "source": "package.json"
+    }
+  ],
+  "interfaces": [],
+  "manifests": [
+    {
+      "path": "Dockerfile",
+      "size": 98,
+      "suffix": "",
+      "tags": [
+        "deployment",
+        "manifest"
+      ]
+    },
+    {
+      "path": "package.json",
+      "size": 93,
+      "suffix": ".json",
+      "tags": [
+        "manifest"
+      ]
+    }
+  ],
+  "repo": "tiny-api",
+  "root": ".",
+  "routes": [
+    {
+      "framework": "Express/Fastify",
+      "method": "GET",
+      "path": "/health",
+      "source": "src/server.ts"
+    },
+    {
+      "framework": "Express/Fastify",
+      "method": "POST",
+      "path": "/orders",
+      "source": "src/server.ts"
+    }
+  ],
+  "tree": {
+    "Dockerfile": null,
+    "package.json": null,
+    "src": {
+      "server.ts": null
+    }
+  },
+  "truncated": false
+}

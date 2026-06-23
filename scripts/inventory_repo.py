@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 
 
@@ -78,6 +79,19 @@ CONFIG_HINTS = {
     "serverless.yml",
 }
 
+TEXT_SUFFIXES = {
+    ".cs",
+    ".go",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".mjs",
+    ".py",
+    ".ts",
+    ".tsx",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -139,6 +153,109 @@ def build_tree(files: list[dict[str, object]]) -> dict[str, object]:
     return tree
 
 
+def read_text(path: Path, *, max_bytes: int = 500_000) -> str:
+    try:
+        if path.stat().st_size > max_bytes:
+            return ""
+        return path.read_text(errors="ignore")
+    except OSError:
+        return ""
+
+
+def detect_frameworks(root: Path, files: list[dict[str, object]]) -> list[dict[str, str]]:
+    detected: dict[str, dict[str, str]] = {}
+    paths = {str(item["path"]) for item in files}
+
+    package_json = root / "package.json"
+    if package_json.exists():
+        try:
+            package = json.loads(read_text(package_json))
+            deps = {
+                **package.get("dependencies", {}),
+                **package.get("devDependencies", {}),
+            }
+            for name, framework in {
+                "express": "Express",
+                "fastify": "Fastify",
+                "next": "Next.js",
+                "astro": "Astro",
+                "@nestjs/core": "NestJS",
+            }.items():
+                if name in deps:
+                    detected[framework] = {"name": framework, "source": "package.json"}
+        except json.JSONDecodeError:
+            pass
+
+    requirements = "\n".join(
+        read_text(root / path)
+        for path in ("requirements.txt", "pyproject.toml", "Pipfile")
+        if (root / path).exists()
+    ).lower()
+    for needle, framework in {
+        "fastapi": "FastAPI",
+        "django": "Django",
+        "flask": "Flask",
+    }.items():
+        if needle in requirements:
+            detected[framework] = {"name": framework, "source": "python manifest"}
+
+    java_build = "\n".join(
+        read_text(root / path)
+        for path in ("pom.xml", "build.gradle", "settings.gradle")
+        if (root / path).exists()
+    ).lower()
+    if "spring-boot" in java_build or "org.springframework" in java_build:
+        detected["Spring"] = {"name": "Spring", "source": "java build file"}
+
+    if any(path.endswith(".csproj") for path in paths):
+        detected[".NET"] = {"name": ".NET", "source": "*.csproj"}
+    if any(path.endswith(".tf") for path in paths):
+        detected["Terraform"] = {"name": "Terraform", "source": "*.tf"}
+    if any(path.endswith((".yaml", ".yml")) and ("k8s" in path or "helm" in path) for path in paths):
+        detected["Kubernetes"] = {"name": "Kubernetes", "source": "k8s/helm yaml"}
+
+    return [detected[name] for name in sorted(detected)]
+
+
+def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str, str]]:
+    routes: list[dict[str, str]] = []
+    patterns = [
+        ("Express/Fastify", re.compile(r"\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)")),
+        ("FastAPI/Flask", re.compile(r"@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)")),
+        ("Spring", re.compile(r"@(GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?['\"]([^'\"]+)")),
+    ]
+
+    for item in files:
+        path = root / str(item["path"])
+        if path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        text = read_text(path)
+        if not text:
+            continue
+        for framework, pattern in patterns:
+            for match in pattern.finditer(text):
+                method = match.group(1).replace("Mapping", "").upper() or "ANY"
+                if method == "REQUEST":
+                    method = "ANY"
+                routes.append(
+                    {
+                        "framework": framework,
+                        "method": method,
+                        "path": match.group(2),
+                        "source": str(item["path"]),
+                    }
+                )
+
+    for item in files:
+        rel = str(item["path"])
+        if rel.startswith("app/api/") and rel.endswith(("route.ts", "route.js")):
+            route = "/" + rel.removeprefix("app/api/").rsplit("/route.", 1)[0]
+            routes.append({"framework": "Next.js", "method": "ANY", "path": route, "source": rel})
+
+    unique = {(route["framework"], route["method"], route["path"], route["source"]): route for route in routes}
+    return [unique[key] for key in sorted(unique)]
+
+
 def collect_inventory(
     repo: str | Path,
     *,
@@ -187,10 +304,12 @@ def collect_inventory(
     entrypoints = [item for item in files if "entrypoint" in item["tags"]]
     interfaces = [item for item in files if "interface" in item["tags"]]
     deployments = [item for item in files if "deployment" in item["tags"]]
+    frameworks = detect_frameworks(root, files)
+    routes = extract_routes(root, files)
 
     return {
         "repo": root.name,
-        "root": str(root),
+        "root": ".",
         "truncated": truncated,
         "counts": {
             "files": len(files),
@@ -198,7 +317,11 @@ def collect_inventory(
             "entrypoints": len(entrypoints),
             "interfaces": len(interfaces),
             "deployments": len(deployments),
+            "frameworks": len(frameworks),
+            "routes": len(routes),
         },
+        "frameworks": frameworks,
+        "routes": routes[:200],
         "manifests": manifests,
         "entrypoints": entrypoints,
         "interfaces": interfaces[:200],

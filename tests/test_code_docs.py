@@ -29,6 +29,23 @@ class CodeDocsTests(unittest.TestCase):
         run(["git", "commit", "-m", "initial"], repo)
         return repo
 
+    def make_node_api_repo(self, tmp_root: Path) -> Path:
+        repo = tmp_root / "node-api"
+        repo.mkdir()
+        (repo / "package.json").write_text('{"dependencies":{"express":"^5.0.0"}}\n')
+        (repo / "src").mkdir()
+        (repo / "src" / "server.ts").write_text(
+            "import express from 'express';\n"
+            "const app = express();\n"
+            "app.get('/health', (_req, res) => res.send('ok'));\n"
+        )
+        run(["git", "init"], repo)
+        run(["git", "config", "user.email", "test@example.com"], repo)
+        run(["git", "config", "user.name", "Test User"], repo)
+        run(["git", "add", "."], repo)
+        run(["git", "commit", "-m", "initial"], repo)
+        return repo
+
     def test_generate_creates_docs_and_diagrams(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
@@ -45,6 +62,33 @@ class CodeDocsTests(unittest.TestCase):
             self.assertEqual(inventory["counts"]["manifests"], 2)
             self.assertGreaterEqual(inventory["counts"]["interfaces"], 1)
             self.assertGreaterEqual(inventory["counts"]["deployments"], 1)
+
+    def test_detects_frameworks_and_routes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
+            self.assertEqual(inventory["frameworks"][0]["name"], "Express")
+            self.assertEqual(inventory["routes"][0]["method"], "GET")
+            self.assertEqual(inventory["routes"][0]["path"], "/health")
+
+    def test_config_can_change_docs_dir_and_excludes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            (repo / "code-docs.yml").write_text("docs_dir: generated-docs\nexclude:\n  - src\n")
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            self.assertTrue((repo / "generated-docs" / "README.md").exists())
+            inventory = json.loads((repo / "generated-docs" / "generated" / "code-doc-inventory.json").read_text())
+            self.assertEqual(inventory["counts"]["routes"], 0)
+
+    def test_validate_diagrams_passes_after_generate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+            result = run([sys.executable, str(CODE_DOCS), "validate-diagrams", str(repo)], ROOT)
+            self.assertIn("Mermaid diagrams passed", result.stdout)
 
     def test_check_fails_when_generated_docs_are_not_committed(self):
         with tempfile.TemporaryDirectory() as tmp:

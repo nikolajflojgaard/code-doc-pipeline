@@ -1,0 +1,12 @@
+flowchart TB
+  Repo[tiny-api repository]
+  Frameworks[Detected frameworks]
+  Repo -->|uses| Frameworks
+  Manifests[Build and dependency manifests]
+  Repo -->|defines| Manifests
+  Interfaces[Interfaces and routes]
+  Repo -->|exposes| Interfaces
+  Deploy[Deployment automation]
+  Repo -->|ships with| Deploy
+  Docs[Generated documentation]
+  Repo -->|documents| Docs

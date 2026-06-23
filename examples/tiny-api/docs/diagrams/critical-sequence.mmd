@@ -1,0 +1,11 @@
+sequenceDiagram
+  participant Consumer
+  participant Route as GET /health
+  participant Application
+  participant Dependency
+
+  Consumer->>Route: Request
+  Route->>Application: Validate and dispatch
+  Application->>Dependency: Read/write/call
+  Dependency-->>Application: Result
+  Application-->>Consumer: Response or side effect

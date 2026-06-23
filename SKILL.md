@@ -14,6 +14,7 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
 1. Establish the documentation contract.
    - Identify audience: new engineer onboarding, service owners, platform operators, API consumers, auditors, or architects.
    - Identify output location: usually `docs/`, `architecture/`, `handbook/`, or existing repo conventions.
+   - Read `code-docs.yml`, `code-docs.yaml`, or `code-docs.json` when present for output path, exclusions, strictness, owner/team, and repo-specific policy.
    - Identify pipeline mode:
      - `generate`: create or refresh docs.
      - `check`: fail when generated docs differ from committed docs.
@@ -53,7 +54,8 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
 6. Use the production CLI when the repo has no existing documentation generator.
    - Run `python3 scripts/code_docs.py generate <repo>` to create/update baseline docs and Mermaid diagrams.
    - Run `python3 scripts/code_docs.py check <repo>` in CI to fail when generated docs drift.
-   - Run `python3 scripts/code_docs.py review <repo>` when teams want a non-writing summary first.
+   - Run `python3 scripts/code_docs.py validate-diagrams <repo>` to validate generated Mermaid files.
+   - Run `python3 scripts/code_docs.py review <repo> --github-summary` when teams want a PR/job summary.
 
 7. Make the pipeline safe.
    - In `generate` mode, write deterministic files and avoid timestamps unless needed.
@@ -103,7 +105,10 @@ python3 scripts/code_docs.py generate .
 python3 scripts/code_docs.py check .
 
 # Non-writing summary mode.
-python3 scripts/code_docs.py review .
+python3 scripts/code_docs.py review . --github-summary
+
+# Lightweight Mermaid validation.
+python3 scripts/code_docs.py validate-diagrams .
 ```
 
 For inventory only:

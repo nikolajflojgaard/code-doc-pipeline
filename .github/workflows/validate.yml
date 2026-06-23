@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -22,3 +26,33 @@ jobs:
         run: python scripts/inventory_repo.py . --out /tmp/code-doc-inventory.json
       - name: Smoke test docs generator
         run: python scripts/code_docs.py generate . --docs-dir /tmp/code-docs
+      - name: Validate generated Mermaid diagrams
+        run: python scripts/code_docs.py validate-diagrams . --docs-dir /tmp/code-docs
+      - name: Smoke test review report
+        run: python scripts/code_docs.py review . --github-summary --report /tmp/code-doc-review.md
+      - name: Update PR documentation comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- code-doc-pipeline:review -->'
+          body_file=/tmp/code-doc-review-with-marker.md
+          printf '%s\n\n' "$marker" > "$body_file"
+          cat /tmp/code-doc-review.md >> "$body_file"
+
+          comment_id="$(
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" \
+              | head -n 1
+          )"
+
+          if [ -n "$comment_id" ]; then
+            body="$(cat "$body_file")"
+            gh api "repos/$REPO/issues/comments/$comment_id" \
+              --method PATCH \
+              --field body="$body"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body_file"
+          fi
