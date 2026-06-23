@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Doc Pipeline"
+  short_description: "Generate codebase docs and diagrams"
+  default_prompt: "Use $code-doc-pipeline to generate pipeline-ready architecture documentation for this repository."
