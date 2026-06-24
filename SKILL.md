@@ -15,6 +15,7 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Identify audience: new engineer onboarding, service owners, platform operators, API consumers, auditors, or architects.
    - Identify output location: usually `docs/`, `architecture/`, `handbook/`, or existing repo conventions.
    - Read `code-docs.yml`, `code-docs.yaml`, or `code-docs.json` when present for output path, exclusions, strictness, owner/team, and repo-specific policy.
+   - Prefer explicit `service_name`, `owner`, `strict`, and `required_diagrams` config when docs are enforced in CI.
    - Identify pipeline mode:
      - `generate`: create or refresh docs.
      - `check`: fail when generated docs differ from committed docs.
@@ -52,10 +53,11 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - See `references/diagram-patterns.md` for diagram selection and Mermaid patterns.
 
 6. Use the production CLI when the repo has no existing documentation generator.
-   - Run `python3 scripts/code_docs.py generate <repo>` to create/update baseline docs and Mermaid diagrams.
-   - Run `python3 scripts/code_docs.py check <repo>` in CI to fail when generated docs drift.
-   - Run `python3 scripts/code_docs.py validate-diagrams <repo>` to validate generated Mermaid files.
-   - Run `python3 scripts/code_docs.py review <repo> --github-summary` when teams want a PR/job summary.
+   - Install with `python3 -m pip install -e .` while developing the skill repo, or install from GitHub in CI.
+   - Run `code-docs generate <repo>` to create/update baseline docs and Mermaid diagrams.
+   - Run `code-docs check <repo>` in CI to fail when generated docs drift, required diagrams are missing, or strict policy is incomplete.
+   - Run `code-docs validate-diagrams <repo>` to validate generated Mermaid files.
+   - Run `code-docs review <repo> --github-summary` when teams want a PR/job summary.
 
 7. Make the pipeline safe.
    - In `generate` mode, write deterministic files and avoid timestamps unless needed.
@@ -99,16 +101,16 @@ Use the included CLI:
 
 ```bash
 # Regenerate docs locally or in a scheduled job.
-python3 scripts/code_docs.py generate .
+code-docs generate .
 
 # CI check mode.
-python3 scripts/code_docs.py check .
+code-docs check .
 
 # Non-writing summary mode.
-python3 scripts/code_docs.py review . --github-summary
+code-docs review . --github-summary
 
 # Lightweight Mermaid validation.
-python3 scripts/code_docs.py validate-diagrams .
+code-docs validate-diagrams .
 ```
 
 For inventory only:

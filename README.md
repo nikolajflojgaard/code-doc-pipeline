@@ -39,7 +39,23 @@ code-doc-pipeline/
 
 ## Install
 
-Copy this folder into your Codex/OpenClaw skills directory, for example:
+Install the CLI in editable mode while developing:
+
+```bash
+git clone https://github.com/nikolajflojgaard/code-doc-pipeline.git
+cd code-doc-pipeline
+python3 -m pip install -e .
+```
+
+Then run:
+
+```bash
+code-docs generate /path/to/repo
+code-docs check /path/to/repo
+code-docs review /path/to/repo
+```
+
+You can also copy this folder into your Codex/OpenClaw skills directory:
 
 ```bash
 mkdir -p ~/.codex/skills
@@ -57,7 +73,7 @@ Use $code-doc-pipeline to generate pipeline-ready architecture documentation for
 From a repository you want to document:
 
 ```bash
-python3 ~/.codex/skills/code-doc-pipeline/scripts/code_docs.py generate .
+code-docs generate .
 ```
 
 This creates:
@@ -88,16 +104,16 @@ Use $code-doc-pipeline to create docs/README.md, docs/architecture.md, docs/inte
 
 ```bash
 # Generate or refresh docs and diagrams
-python3 scripts/code_docs.py generate .
+code-docs generate .
 
 # CI mode: regenerate and fail if docs changed
-python3 scripts/code_docs.py check .
+code-docs check .
 
 # Non-writing summary mode
-python3 scripts/code_docs.py review .
+code-docs review .
 
 # Lightweight Mermaid validation
-python3 scripts/code_docs.py validate-diagrams .
+code-docs validate-diagrams .
 
 # Inventory only
 python3 scripts/inventory_repo.py . --out docs/generated/code-doc-inventory.json
@@ -110,13 +126,22 @@ Add `code-docs.yml` at the repository root:
 ```yaml
 docs_dir: docs
 max_files: 5000
+service_name: customer-api
+owner: platform-team
+strict: true
+required_diagrams:
+  - context.mmd
+  - container-or-flow.mmd
+  - critical-sequence.mmd
+  - data-flow.mmd
+  - deployment.mmd
 exclude:
   - node_modules
   - dist
   - generated
 ```
 
-The parser intentionally supports a small YAML subset so the tool stays dependency-free.
+The parser intentionally supports a small YAML subset so the tool stays dependency-free. In strict mode, ownership is required and the configured diagram set is enforced in `check` and `validate-diagrams`.
 
 ## CI Example
 
@@ -141,11 +166,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install code-doc-pipeline
+        run: python3 -m pip install git+https://github.com/nikolajflojgaard/code-doc-pipeline.git
       - name: Check documentation drift
-        run: python3 .codex/skills/code-doc-pipeline/scripts/code_docs.py check .
+        run: code-docs check .
       - name: Add docs review summary
         if: always()
-        run: python3 .codex/skills/code-doc-pipeline/scripts/code_docs.py review . --github-summary --report /tmp/code-doc-review.md
+        run: code-docs review . --github-summary --report /tmp/code-doc-review.md
       - name: Update PR documentation comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:

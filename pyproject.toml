@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-doc-pipeline"
+version = "0.2.0"
+description = "Generate maintainable repository documentation, Mermaid diagrams, and CI documentation drift checks."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "Nikolaj Fløjgaard" }]
+keywords = ["documentation", "architecture", "mermaid", "ci", "codex", "openclaw"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Documentation",
+  "Topic :: Software Development :: Documentation",
+]
+
+[project.urls]
+Homepage = "https://github.com/nikolajflojgaard/code-doc-pipeline"
+Repository = "https://github.com/nikolajflojgaard/code-doc-pipeline"
+Issues = "https://github.com/nikolajflojgaard/code-doc-pipeline/issues"
+
+[project.scripts]
+code-docs = "code_doc_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["code_doc_pipeline*", "scripts*"]

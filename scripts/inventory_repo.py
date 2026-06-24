@@ -114,7 +114,7 @@ def parse_args() -> argparse.Namespace:
 
 def should_skip(path: Path, root: Path, excludes: set[str]) -> bool:
     rel_parts = path.relative_to(root).parts
-    return any(part in excludes for part in rel_parts)
+    return any(part in excludes or part.endswith(".egg-info") for part in rel_parts)
 
 
 def classify(path: Path) -> list[str]:

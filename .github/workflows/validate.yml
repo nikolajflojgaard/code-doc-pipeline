@@ -20,16 +20,20 @@ jobs:
           python-version: "3.12"
       - name: Compile scripts
         run: python -m py_compile scripts/*.py
+      - name: Install package
+        run: python -m pip install -e .
       - name: Run tests
         run: python -m unittest discover -s tests -v
+      - name: Smoke test console script
+        run: code-docs review . --report /tmp/code-doc-review-cli.md
       - name: Smoke test inventory
         run: python scripts/inventory_repo.py . --out /tmp/code-doc-inventory.json
       - name: Smoke test docs generator
-        run: python scripts/code_docs.py generate . --docs-dir /tmp/code-docs
+        run: code-docs generate . --docs-dir /tmp/code-docs
       - name: Validate generated Mermaid diagrams
-        run: python scripts/code_docs.py validate-diagrams . --docs-dir /tmp/code-docs
+        run: code-docs validate-diagrams . --docs-dir /tmp/code-docs
       - name: Smoke test review report
-        run: python scripts/code_docs.py review . --github-summary --report /tmp/code-doc-review.md
+        run: code-docs review . --github-summary --report /tmp/code-doc-review.md
       - name: Update PR documentation comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:

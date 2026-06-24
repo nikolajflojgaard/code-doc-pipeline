@@ -76,12 +76,54 @@ class CodeDocsTests(unittest.TestCase):
     def test_config_can_change_docs_dir_and_excludes(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_node_api_repo(Path(tmp))
-            (repo / "code-docs.yml").write_text("docs_dir: generated-docs\nexclude:\n  - src\n")
+            (repo / "code-docs.yml").write_text(
+                "service_name: Demo API\n"
+                "owner: platform\n"
+                "docs_dir: generated-docs\n"
+                "exclude:\n"
+                "  - src\n"
+            )
             run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
 
             self.assertTrue((repo / "generated-docs" / "README.md").exists())
+            readme = (repo / "generated-docs" / "README.md").read_text()
+            self.assertIn("- Service: `Demo API`", readme)
+            self.assertIn("- Owner: `platform`", readme)
             inventory = json.loads((repo / "generated-docs" / "generated" / "code-doc-inventory.json").read_text())
             self.assertEqual(inventory["counts"]["routes"], 0)
+
+    def test_strict_check_requires_owner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            (repo / "code-docs.yml").write_text("strict: true\n")
+            result = subprocess.run(
+                [sys.executable, str(CODE_DOCS), "check", str(repo)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Strict mode requires `owner`", result.stderr)
+
+    def test_required_diagrams_are_enforced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            (repo / "code-docs.yml").write_text("required_diagrams:\n  - missing.mmd\n")
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+            result = subprocess.run(
+                [sys.executable, str(CODE_DOCS), "validate-diagrams", str(repo)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("missing required diagram", result.stderr)
+
+    def test_module_entrypoint_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            result = run([sys.executable, "-m", "code_doc_pipeline.cli", "review", str(repo)], ROOT)
+            self.assertIn("Code documentation review", result.stdout)
 
     def test_validate_diagrams_passes_after_generate(self):
         with tempfile.TemporaryDirectory() as tmp:

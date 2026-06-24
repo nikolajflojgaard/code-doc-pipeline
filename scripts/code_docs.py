@@ -10,11 +10,30 @@ import subprocess
 import sys
 from pathlib import Path
 
-from inventory_repo import collect_inventory
+try:
+    from .inventory_repo import collect_inventory
+except ImportError:
+    from inventory_repo import collect_inventory
 
 
 START = "<!-- code-doc-pipeline:start -->"
 END = "<!-- code-doc-pipeline:end -->"
+DEFAULT_DIAGRAMS = [
+    "context.mmd",
+    "container-or-flow.mmd",
+    "critical-sequence.mmd",
+    "data-flow.mmd",
+    "deployment.mmd",
+]
+KNOWN_CONFIG_KEYS = {
+    "docs_dir",
+    "exclude",
+    "max_files",
+    "owner",
+    "required_diagrams",
+    "service_name",
+    "strict",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,6 +82,47 @@ def parse_simple_yaml(text: str) -> dict[str, object]:
     return data
 
 
+def as_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
+def as_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def normalize_config(config: dict[str, object]) -> dict[str, object]:
+    normalized = dict(config)
+    normalized["exclude"] = as_list(normalized.get("exclude", []))
+    normalized["required_diagrams"] = as_list(normalized.get("required_diagrams", []))
+    if "strict" in normalized:
+        normalized["strict"] = as_bool(normalized["strict"])
+    return normalized
+
+
+def validate_config(config: dict[str, object]) -> list[str]:
+    errors: list[str] = []
+    unknown = sorted(set(config) - KNOWN_CONFIG_KEYS)
+    for key in unknown:
+        errors.append(f"Unknown config key: {key}")
+    if "max_files" in config and int(config["max_files"]) <= 0:
+        errors.append("max_files must be greater than 0")
+    for key in ("docs_dir", "service_name", "owner"):
+        if key in config and not str(config[key]).strip():
+            errors.append(f"{key} must not be empty")
+    for diagram in as_list(config.get("required_diagrams", [])):
+        if not diagram.endswith(".mmd"):
+            errors.append(f"required_diagrams entries must end with .mmd: {diagram}")
+    return errors
+
+
 def load_config(repo: Path, config_path: str | None) -> dict[str, object]:
     candidates = []
     if config_path:
@@ -75,21 +135,22 @@ def load_config(repo: Path, config_path: str | None) -> dict[str, object]:
             continue
         text = path.read_text()
         if path.suffix == ".json":
-            return json.loads(text)
-        return parse_simple_yaml(text)
+            return normalize_config(json.loads(text))
+        return normalize_config(parse_simple_yaml(text))
     return {}
 
 
 def merge_config(args: argparse.Namespace) -> argparse.Namespace:
     repo = Path(args.repo).resolve()
     config = load_config(repo, getattr(args, "config", None))
+    config_errors = validate_config(config)
+    if config_errors:
+        raise SystemExit("\n".join(config_errors))
     if "docs_dir" in config and args.docs_dir == "docs":
         args.docs_dir = str(config["docs_dir"])
     if "max_files" in config and args.max_files == 5000:
         args.max_files = int(config["max_files"])
-    configured_excludes = config.get("exclude", [])
-    if isinstance(configured_excludes, str):
-        configured_excludes = [configured_excludes]
+    configured_excludes = as_list(config.get("exclude", []))
     args.exclude = [*configured_excludes, *args.exclude]
     args.config_data = config
     return args
@@ -289,16 +350,30 @@ def validate_mermaid_content(content: str, path: Path) -> list[str]:
 
 
 def validate_diagrams(docs_dir: Path) -> list[str]:
+    return validate_diagram_set(docs_dir, required_diagrams=[])
+
+
+def validate_diagram_set(docs_dir: Path, *, required_diagrams: list[str]) -> list[str]:
     diagrams_dir = docs_dir / "diagrams"
     if not diagrams_dir.exists():
         return [f"{diagrams_dir}: missing diagrams directory"]
     errors: list[str] = []
+    for name in required_diagrams:
+        if not (diagrams_dir / name).exists():
+            errors.append(f"{diagrams_dir / name}: missing required diagram")
     for path in sorted(diagrams_dir.glob("*.mmd")):
         errors.extend(validate_mermaid_content(path.read_text(), path))
     return errors
 
 
-def generate(repo: Path, docs_dir: Path, max_files: int, exclude: list[str]) -> dict[str, object]:
+def generate(
+    repo: Path,
+    docs_dir: Path,
+    max_files: int,
+    exclude: list[str],
+    config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    config = config or {}
     effective_exclude = list(exclude)
     try:
         docs_rel = docs_dir.relative_to(repo)
@@ -316,7 +391,9 @@ def generate(repo: Path, docs_dir: Path, max_files: int, exclude: list[str]) -> 
     overview = f"""
 ## Repository Snapshot
 
+- Service: `{config.get('service_name', inventory['repo'])}`
 - Repository: `{inventory['repo']}`
+- Owner: `{config.get('owner', 'unknown')}`
 - Files inventoried: `{inventory['counts']['files']}`
 - Manifests: `{inventory['counts']['manifests']}`
 - Frameworks detected: `{inventory['counts']['frameworks']}`
@@ -431,7 +508,7 @@ def command_generate(args: argparse.Namespace) -> int:
     args = merge_config(args)
     repo = Path(args.repo).resolve()
     docs_dir = (repo / args.docs_dir).resolve()
-    generate(repo, docs_dir, args.max_files, args.exclude)
+    generate(repo, docs_dir, args.max_files, args.exclude, args.config_data)
     print(f"Generated docs in {docs_dir}")
     return 0
 
@@ -440,10 +517,14 @@ def command_check(args: argparse.Namespace) -> int:
     args = merge_config(args)
     repo = Path(args.repo).resolve()
     docs_dir = (repo / args.docs_dir).resolve()
-    generate(repo, docs_dir, args.max_files, args.exclude)
-    diagram_errors = validate_diagrams(docs_dir)
+    generate(repo, docs_dir, args.max_files, args.exclude, args.config_data)
+    required_diagrams = as_list(args.config_data.get("required_diagrams", DEFAULT_DIAGRAMS))
+    diagram_errors = validate_diagram_set(docs_dir, required_diagrams=required_diagrams)
     if diagram_errors:
         print("\n".join(diagram_errors), file=sys.stderr)
+        return 1
+    if args.config_data.get("strict") and not args.config_data.get("owner"):
+        print("Strict mode requires `owner` in code-docs.yml.", file=sys.stderr)
         return 1
     if (repo / ".git").exists() and git_diff_has_changes(repo, docs_dir):
         print("Documentation drift detected. Run `code_docs.py generate` and commit the docs changes.", file=sys.stderr)
@@ -456,7 +537,7 @@ def command_review(args: argparse.Namespace) -> int:
     args = merge_config(args)
     repo = Path(args.repo).resolve()
     inventory = collect_inventory(repo, max_files=args.max_files, exclude=args.exclude)
-    report = render_review_report(inventory)
+    report = render_review_report(inventory, args.config_data)
     print(report)
     if args.report:
         write_text(Path(args.report), report)
@@ -472,7 +553,8 @@ def command_validate_diagrams(args: argparse.Namespace) -> int:
     args = merge_config(args)
     repo = Path(args.repo).resolve()
     docs_dir = (repo / args.docs_dir).resolve()
-    errors = validate_diagrams(docs_dir)
+    required_diagrams = as_list(args.config_data.get("required_diagrams", DEFAULT_DIAGRAMS))
+    errors = validate_diagram_set(docs_dir, required_diagrams=required_diagrams)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
@@ -480,10 +562,14 @@ def command_validate_diagrams(args: argparse.Namespace) -> int:
     return 0
 
 
-def render_review_report(inventory: dict[str, object]) -> str:
+def render_review_report(inventory: dict[str, object], config: dict[str, object] | None = None) -> str:
+    config = config or {}
     frameworks = ", ".join(item["name"] for item in inventory["frameworks"]) or "none detected"
     return f"""## Code documentation review
 
+- Service: `{config.get('service_name', inventory['repo'])}`
+- Owner: `{config.get('owner', 'unknown')}`
+- Strict mode: `{bool(config.get('strict', False))}`
 - Files inventoried: `{inventory['counts']['files']}`
 - Frameworks: {frameworks}
 - Routes detected: `{inventory['counts']['routes']}`
