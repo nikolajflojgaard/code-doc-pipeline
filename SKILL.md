@@ -25,6 +25,7 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Prefer existing manifest files and source structure over guesses.
    - Run `scripts/inventory_repo.py <repo> --out <repo>/docs/code-doc-inventory.json` when no better local inventory tool exists.
    - Read build files, route/API declarations, package manifests, schema/migration folders, IaC, deployment files, and existing docs.
+   - Detect first-pass runtime flows from routes into handler/service/repository/data hints when code structure makes that visible.
    - Exclude generated/vendor directories such as `node_modules`, `dist`, `build`, `.git`, `.next`, `target`, `vendor`, and lockfile-only noise.
 
 3. Infer system boundaries.
@@ -36,6 +37,7 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Repository overview: purpose, stack, how to run/test/build, key directories.
    - Architecture: containers/components, data flow, runtime dependencies, trust boundaries, and diagrams.
    - API/interface docs: routes, commands, events, schemas, examples, auth expectations.
+   - Runtime flow docs: route -> handler -> service/repository -> data dependency when detected.
    - Operational docs: config, env vars, jobs, deployment, observability, failure/recovery notes.
    - Decision docs: ADR candidates only when the code reveals meaningful architectural decisions.
 
@@ -127,6 +129,7 @@ Generated documentation must:
 - expose important dependencies and boundaries
 - show useful Mermaid diagrams for both structure and behavior in non-trivial systems
 - document how to build, test, deploy, configure, and observe the system when the repo contains that information
+- expose route-to-code runtime flows when handlers and downstream calls are visible
 - separate facts proven by code from assumptions
 - be stable enough that repeated runs do not create meaningless diffs
 

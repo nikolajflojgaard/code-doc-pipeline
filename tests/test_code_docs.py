@@ -46,6 +46,40 @@ class CodeDocsTests(unittest.TestCase):
         run(["git", "commit", "-m", "initial"], repo)
         return repo
 
+    def make_layered_node_api_repo(self, tmp_root: Path) -> Path:
+        repo = tmp_root / "layered-node-api"
+        repo.mkdir()
+        (repo / "package.json").write_text('{"dependencies":{"express":"^5.0.0","prisma":"^6.0.0"}}\n')
+        (repo / "src").mkdir()
+        (repo / "src" / "server.ts").write_text(
+            "import express from 'express';\n"
+            "import { listCustomers } from './services/customers';\n"
+            "const app = express();\n"
+            "app.get('/customers', async (_req, res) => {\n"
+            "  const customers = await listCustomers();\n"
+            "  res.json(customers);\n"
+            "});\n"
+        )
+        (repo / "src" / "services").mkdir()
+        (repo / "src" / "services" / "customers.ts").write_text(
+            "import { customerRepository } from '../repositories/customers';\n"
+            "export async function listCustomers() {\n"
+            "  return customerRepository.findMany();\n"
+            "}\n"
+        )
+        (repo / "src" / "repositories").mkdir()
+        (repo / "src" / "repositories" / "customers.ts").write_text(
+            "export const customerRepository = {\n"
+            "  findMany: () => prisma.customer.findMany(),\n"
+            "};\n"
+        )
+        run(["git", "init"], repo)
+        run(["git", "config", "user.email", "test@example.com"], repo)
+        run(["git", "config", "user.name", "Test User"], repo)
+        run(["git", "add", "."], repo)
+        run(["git", "commit", "-m", "initial"], repo)
+        return repo
+
     def test_generate_creates_docs_and_diagrams(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
@@ -72,6 +106,22 @@ class CodeDocsTests(unittest.TestCase):
             self.assertEqual(inventory["frameworks"][0]["name"], "Express")
             self.assertEqual(inventory["routes"][0]["method"], "GET")
             self.assertEqual(inventory["routes"][0]["path"], "/health")
+
+    def test_detects_route_runtime_flow_and_data_hints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_layered_node_api_repo(Path(tmp))
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
+            self.assertEqual(inventory["counts"]["flows"], 1)
+            flow = inventory["flows"][0]
+            self.assertEqual(flow["route"], "GET /customers")
+            self.assertIn("listCustomers", flow["calls"])
+            self.assertIn("prisma", flow["data_hints"])
+
+            sequence = (repo / "docs" / "diagrams" / "critical-sequence.mmd").read_text()
+            self.assertIn("GET /customers", sequence)
+            self.assertIn("listCustomers", sequence)
 
     def test_config_can_change_docs_dir_and_excludes(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,9 +1,13 @@
 flowchart LR
-  Source[Code and config]
-  Processor[Documentation pipeline]
-  Store[(Generated inventory)]
-  Docs[Markdown and Mermaid docs]
+  Consumer[API consumer]
+  Route[POST /orders]
+  Handler[inline handler]
+  Service[acceptOrder]
+  Data[(Data dependency)]
+  Docs[Generated docs]
 
-  Source -->|reads| Processor
-  Processor -->|writes| Store
-  Processor -->|updates| Docs
+  Consumer -->|calls| Route
+  Route -->|dispatches| Handler
+  Handler -->|uses| Service
+  Service -->|reads or writes| Data
+  Handler -->|documented by| Docs

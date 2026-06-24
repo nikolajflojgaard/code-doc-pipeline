@@ -2,7 +2,8 @@
   "counts": {
     "deployments": 1,
     "entrypoints": 0,
-    "files": 3,
+    "files": 5,
+    "flows": 2,
     "frameworks": 1,
     "interfaces": 0,
     "manifests": 2,
@@ -40,9 +41,52 @@
     },
     {
       "path": "src/server.ts",
-      "size": 231,
+      "size": 294,
       "suffix": ".ts",
       "tags": []
+    },
+    {
+      "path": "src/repositories/orders.ts",
+      "size": 106,
+      "suffix": ".ts",
+      "tags": []
+    },
+    {
+      "path": "src/services/orders.ts",
+      "size": 148,
+      "suffix": ".ts",
+      "tags": []
+    }
+  ],
+  "flows": [
+    {
+      "calls": [],
+      "confidence": "heuristic",
+      "data_hints": [],
+      "entrypoint": "inline handler",
+      "framework": "Express/Fastify",
+      "route": "GET /health",
+      "source": "src/server.ts"
+    },
+    {
+      "calls": [
+        "acceptOrder",
+        "orderRepository",
+        "save",
+        "database",
+        "insert"
+      ],
+      "confidence": "heuristic",
+      "data_hints": [
+        "repo",
+        "repository",
+        "save",
+        "database"
+      ],
+      "entrypoint": "inline handler",
+      "framework": "Express/Fastify",
+      "route": "POST /orders",
+      "source": "src/server.ts"
     }
   ],
   "frameworks": [
@@ -91,7 +135,13 @@
     "Dockerfile": null,
     "package.json": null,
     "src": {
-      "server.ts": null
+      "repositories": {
+        "orders.ts": null
+      },
+      "server.ts": null,
+      "services": {
+        "orders.ts": null
+      }
     }
   },
   "truncated": false

@@ -1,4 +1,5 @@
 import express from "express";
+import { acceptOrder } from "./services/orders";
 
 const app = express();
 
@@ -7,7 +8,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.post("/orders", (_req, res) => {
-  res.status(202).json({ status: "accepted" });
+  const order = acceptOrder();
+  res.status(202).json(order);
 });
 
 app.listen(3000);

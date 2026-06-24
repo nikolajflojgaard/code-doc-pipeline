@@ -92,6 +92,51 @@ TEXT_SUFFIXES = {
     ".tsx",
 }
 
+CALL_STOP_WORDS = {
+    "app",
+    "async",
+    "await",
+    "console",
+    "def",
+    "delete",
+    "for",
+    "function",
+    "get",
+    "if",
+    "json",
+    "len",
+    "listen",
+    "map",
+    "next",
+    "patch",
+    "post",
+    "print",
+    "put",
+    "res",
+    "return",
+    "send",
+    "str",
+    "status",
+}
+
+DATA_HINT_WORDS = (
+    "collection",
+    "database",
+    "db",
+    "find",
+    "model",
+    "mongoose",
+    "prisma",
+    "query",
+    "repo",
+    "repository",
+    "save",
+    "schema",
+    "select",
+    "sql",
+    "supabase",
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -226,6 +271,8 @@ def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str,
     ]
 
     for item in files:
+        if "test" in item["tags"]:
+            continue
         path = root / str(item["path"])
         if path.suffix.lower() not in TEXT_SUFFIXES:
             continue
@@ -247,6 +294,8 @@ def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str,
                 )
 
     for item in files:
+        if "test" in item["tags"]:
+            continue
         rel = str(item["path"])
         if rel.startswith("app/api/") and rel.endswith(("route.ts", "route.js")):
             route = "/" + rel.removeprefix("app/api/").rsplit("/route.", 1)[0]
@@ -254,6 +303,164 @@ def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str,
 
     unique = {(route["framework"], route["method"], route["path"], route["source"]): route for route in routes}
     return [unique[key] for key in sorted(unique)]
+
+
+def first_match(patterns: list[str], text: str) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def handler_reference(block: str) -> str | None:
+    match = re.search(r"['\"][^'\"]+['\"]\s*,\s*([A-Za-z_][A-Za-z0-9_]*)", block)
+    if not match:
+        return None
+    name = match.group(1)
+    if name.lower() in CALL_STOP_WORDS:
+        return None
+    return name
+
+
+def extract_calls(block: str) -> list[str]:
+    calls: list[str] = []
+    for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s*\(", block):
+        name = match.group(1)
+        if name.lower() not in CALL_STOP_WORDS and name not in calls:
+            calls.append(name)
+    for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", block):
+        name = match.group(1)
+        if name.lower() in CALL_STOP_WORDS:
+            continue
+        if name not in calls:
+            calls.append(name)
+    return calls[:12]
+
+
+def extract_data_hints(block: str) -> list[str]:
+    lowered = block.lower()
+    hints = [word for word in DATA_HINT_WORDS if word in lowered]
+    return hints[:8]
+
+
+def route_window(text: str, start: int, *, suffix: str) -> str:
+    if suffix == ".py":
+        rest = text[start:]
+        next_route = re.search(r"\n@(?:app|router)\.(?:get|post|put|patch|delete)\s*\(", rest[1:])
+        return rest[: next_route.start() + 1] if next_route else rest[:2500]
+
+    rest = text[start:]
+    next_route = re.search(r"\b(?:app|router)\.(?:get|post|put|patch|delete)\s*\(", rest[1:])
+    route_end = re.search(r"\n\s*\}\s*\)\s*;?", rest)
+    end_positions = []
+    if next_route:
+        end_positions.append(next_route.start() + 1)
+    if route_end:
+        end_positions.append(route_end.end())
+    return rest[: min(end_positions)] if end_positions else rest[:2500]
+
+
+def symbol_windows(root: Path, files: list[dict[str, object]]) -> dict[str, str]:
+    symbols: dict[str, str] = {}
+    pattern = re.compile(
+        r"\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)|"
+        r"\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=|"
+        r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("
+    )
+    for item in files:
+        if "test" in item["tags"]:
+            continue
+        path = root / str(item["path"])
+        if path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        text = read_text(path)
+        if not text:
+            continue
+        for match in pattern.finditer(text):
+            name = next(group for group in match.groups() if group)
+            symbols.setdefault(name, text[match.start() : match.start() + 1800])
+    return symbols
+
+
+def expand_calls_and_data(calls: list[str], data_hints: list[str], symbols: dict[str, str]) -> tuple[list[str], list[str]]:
+    expanded_calls = list(calls)
+    expanded_data = list(data_hints)
+    queue = list(calls)
+    seen = set(queue)
+
+    for _ in range(2):
+        next_queue: list[str] = []
+        for call in queue:
+            block = symbols.get(call)
+            if not block:
+                continue
+            for hint in extract_data_hints(block):
+                if hint not in expanded_data:
+                    expanded_data.append(hint)
+            for downstream in extract_calls(block):
+                if downstream not in seen:
+                    seen.add(downstream)
+                    expanded_calls.append(downstream)
+                    next_queue.append(downstream)
+        queue = next_queue
+
+    return expanded_calls[:12], expanded_data[:8]
+
+
+def extract_flows(root: Path, files: list[dict[str, object]], routes: list[dict[str, str]]) -> list[dict[str, object]]:
+    flows: list[dict[str, object]] = []
+    routes_by_source: dict[str, list[dict[str, str]]] = {}
+    symbols = symbol_windows(root, files)
+    for route in routes:
+        routes_by_source.setdefault(route["source"], []).append(route)
+
+    for source, source_routes in routes_by_source.items():
+        path = root / source
+        text = read_text(path)
+        if not text:
+            continue
+
+        for route in source_routes:
+            escaped_path = re.escape(route["path"])
+            method = route["method"].lower()
+            if route["framework"] == "Spring":
+                pattern = re.compile(rf"@(?:{method.title()}Mapping|RequestMapping)\s*\([^)]*['\"]{escaped_path}['\"]", re.I)
+            elif path.suffix == ".py":
+                pattern = re.compile(rf"@(?:app|router)\.{method}\s*\(\s*['\"]{escaped_path}['\"]")
+            else:
+                pattern = re.compile(rf"\b(?:app|router)\.{method}\s*\(\s*['\"]{escaped_path}['\"]")
+
+            match = pattern.search(text)
+            if not match:
+                continue
+            window = route_window(text, match.start(), suffix=path.suffix.lower())
+            entrypoint = handler_reference(window) or first_match(
+                [
+                    r"(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    r"def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                    r"public\s+\w+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                ],
+                window,
+            )
+            calls = [call for call in extract_calls(window) if call != entrypoint]
+            if entrypoint and entrypoint in symbols and entrypoint not in calls:
+                calls.insert(0, entrypoint)
+            calls, data_hints = expand_calls_and_data(calls, extract_data_hints(window), symbols)
+            flows.append(
+                {
+                    "route": f"{route['method']} {route['path']}",
+                    "framework": route["framework"],
+                    "source": source,
+                    "entrypoint": entrypoint or "inline handler",
+                    "calls": calls,
+                    "data_hints": data_hints,
+                    "confidence": "heuristic",
+                }
+            )
+
+    unique = {(flow["route"], flow["source"], flow["entrypoint"]): flow for flow in flows}
+    return [unique[key] for key in sorted(unique)][:100]
 
 
 def collect_inventory(
@@ -306,6 +513,7 @@ def collect_inventory(
     deployments = [item for item in files if "deployment" in item["tags"]]
     frameworks = detect_frameworks(root, files)
     routes = extract_routes(root, files)
+    flows = extract_flows(root, files, routes)
 
     return {
         "repo": root.name,
@@ -319,9 +527,11 @@ def collect_inventory(
             "deployments": len(deployments),
             "frameworks": len(frameworks),
             "routes": len(routes),
+            "flows": len(flows),
         },
         "frameworks": frameworks,
         "routes": routes[:200],
+        "flows": flows,
         "manifests": manifests,
         "entrypoints": entrypoints,
         "interfaces": interfaces[:200],

@@ -4,11 +4,14 @@
 
 ## Repository Snapshot
 
+- Service: `tiny-api`
 - Repository: `tiny-api`
-- Files inventoried: `3`
+- Owner: `unknown`
+- Files inventoried: `5`
 - Manifests: `2`
 - Frameworks detected: `1`
 - Routes detected: `2`
+- Runtime flows detected: `2`
 - Interfaces/routes hints: `0`
 - Deployment hints: `1`
 - Inventory truncated: `False`

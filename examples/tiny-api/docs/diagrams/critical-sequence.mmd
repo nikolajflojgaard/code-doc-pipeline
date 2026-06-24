@@ -1,11 +1,14 @@
 sequenceDiagram
   participant Consumer
-  participant Route as GET /health
-  participant Application
-  participant Dependency
+  participant Route as POST /orders
+  participant Handler as inline handler
+  participant Service as acceptOrder
+  participant Data as Data dependency
 
   Consumer->>Route: Request
-  Route->>Application: Validate and dispatch
-  Application->>Dependency: Read/write/call
-  Dependency-->>Application: Result
-  Application-->>Consumer: Response or side effect
+  Route->>Handler: Dispatch
+  Handler->>Service: Call acceptOrder
+  Service->>Data: Read/write
+  Data-->>Service: Result
+  Service-->>Handler: Result
+  Handler-->>Consumer: Response or side effect

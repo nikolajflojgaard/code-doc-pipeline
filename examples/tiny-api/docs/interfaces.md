@@ -13,6 +13,12 @@
 - `POST /orders` from `src/server.ts` (Express/Fastify)
 
 
+## Detected Runtime Flows
+
+- `GET /health` in `src/server.ts` -> `inline handler`; calls: no downstream calls detected; data: no data hints detected
+- `POST /orders` in `src/server.ts` -> `inline handler`; calls: `acceptOrder`, `orderRepository`, `save`, `database`, `insert`; data: `repo`, `repository`, `save`, `database`
+
+
 ## Notes
 
 - Treat this list as a discovery aid, not a complete API contract.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "code-doc-pipeline"
-version = "0.2.0"
+version = "0.3.0"
 description = "Generate maintainable repository documentation, Mermaid diagrams, and CI documentation drift checks."
 readme = "README.md"
 requires-python = ">=3.9"

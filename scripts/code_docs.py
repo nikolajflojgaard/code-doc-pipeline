@@ -182,6 +182,22 @@ def route_lines(inventory: dict[str, object]) -> str:
     )
 
 
+def flow_lines(inventory: dict[str, object]) -> str:
+    flows = inventory.get("flows", [])
+    if not flows:
+        return "- None detected\n"
+    lines = []
+    for flow in flows[:50]:
+        calls = ", ".join(f"`{call}`" for call in flow.get("calls", [])[:6]) or "no downstream calls detected"
+        data = ", ".join(f"`{hint}`" for hint in flow.get("data_hints", [])[:4]) or "no data hints detected"
+        lines.append(
+            f"- `{flow['route']}` in `{flow['source']}` -> `{flow['entrypoint']}`; calls: {calls}; data: {data}"
+        )
+    if len(flows) > 50:
+        lines.append(f"- ...and {len(flows) - 50} more")
+    return "\n".join(lines) + "\n"
+
+
 def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.rstrip() + "\n")
@@ -205,6 +221,13 @@ def replace_generated_section(existing: str, body: str) -> str:
 def upsert_doc(path: Path, title: str, body: str) -> None:
     existing = path.read_text() if path.exists() else f"# {title}\n"
     write_text(path, replace_generated_section(existing, body))
+
+
+def primary_flow(inventory: dict[str, object]) -> dict[str, object] | None:
+    flows = inventory.get("flows", [])
+    if not flows:
+        return None
+    return max(flows, key=lambda flow: len(flow.get("calls", [])) + (2 * len(flow.get("data_hints", []))))
 
 
 def mermaid_context(inventory: dict[str, object]) -> str:
@@ -239,6 +262,37 @@ def mermaid_flow(inventory: dict[str, object]) -> str:
 
 
 def mermaid_sequence(inventory: dict[str, object]) -> str:
+    flow = primary_flow(inventory)
+    if flow:
+        calls = flow.get("calls", [])
+        first_call = calls[0] if calls else "Application"
+        has_data = bool(flow.get("data_hints"))
+        lines = [
+            "sequenceDiagram",
+            "  participant Consumer",
+            f"  participant Route as {flow['route']}",
+            f"  participant Handler as {flow['entrypoint']}",
+        ]
+        if calls:
+            lines.append(f"  participant Service as {first_call}")
+        if has_data:
+            lines.append("  participant Data as Data dependency")
+        lines += [
+            "",
+            "  Consumer->>Route: Request",
+            "  Route->>Handler: Dispatch",
+        ]
+        if calls:
+            lines.append(f"  Handler->>Service: Call {first_call}")
+            if has_data:
+                lines.append("  Service->>Data: Read/write")
+                lines.append("  Data-->>Service: Result")
+            lines.append("  Service-->>Handler: Result")
+        elif has_data:
+            lines.append("  Handler->>Data: Read/write")
+            lines.append("  Data-->>Handler: Result")
+        lines.append("  Handler-->>Consumer: Response or side effect")
+        return "\n".join(lines) + "\n"
     if inventory.get("routes"):
         route = inventory["routes"][0]
         return f"""sequenceDiagram
@@ -290,6 +344,25 @@ def mermaid_sequence(inventory: dict[str, object]) -> str:
 
 
 def mermaid_data_flow(inventory: dict[str, object]) -> str:
+    flow = primary_flow(inventory)
+    if flow:
+        data_label = "Data dependency" if flow.get("data_hints") else "Downstream dependency"
+        calls = flow.get("calls", [])
+        service_label = calls[0] if calls else flow["entrypoint"]
+        return f"""flowchart LR
+  Consumer[API consumer]
+  Route[{flow['route']}]
+  Handler[{flow['entrypoint']}]
+  Service[{service_label}]
+  Data[({data_label})]
+  Docs[Generated docs]
+
+  Consumer -->|calls| Route
+  Route -->|dispatches| Handler
+  Handler -->|uses| Service
+  Service -->|reads or writes| Data
+  Handler -->|documented by| Docs
+"""
     data_files = [item for item in inventory["files"] if "data" in item["tags"]]
     if data_files:
         source = "Data source"
@@ -398,6 +471,7 @@ def generate(
 - Manifests: `{inventory['counts']['manifests']}`
 - Frameworks detected: `{inventory['counts']['frameworks']}`
 - Routes detected: `{inventory['counts']['routes']}`
+- Runtime flows detected: `{inventory['counts']['flows']}`
 - Interfaces/routes hints: `{inventory['counts']['interfaces']}`
 - Deployment hints: `{inventory['counts']['deployments']}`
 - Inventory truncated: `{inventory['truncated']}`
@@ -446,6 +520,10 @@ def generate(
 - [Data flow](diagrams/data-flow.mmd)
 - [Deployment](diagrams/deployment.mmd)
 
+## Detected Runtime Flows
+
+{flow_lines(inventory)}
+
 ## Unknowns
 
 - Confirm runtime boundaries with a service owner.
@@ -461,6 +539,10 @@ def generate(
 ## Detected Routes
 
 {route_lines(inventory)}
+
+## Detected Runtime Flows
+
+{flow_lines(inventory)}
 
 ## Notes
 
@@ -573,6 +655,7 @@ def render_review_report(inventory: dict[str, object], config: dict[str, object]
 - Files inventoried: `{inventory['counts']['files']}`
 - Frameworks: {frameworks}
 - Routes detected: `{inventory['counts']['routes']}`
+- Runtime flows detected: `{inventory['counts']['flows']}`
 - Interface hints: `{inventory['counts']['interfaces']}`
 - Deployment hints: `{inventory['counts']['deployments']}`
 - Inventory truncated: `{inventory['truncated']}`
@@ -580,7 +663,7 @@ def render_review_report(inventory: dict[str, object], config: dict[str, object]
 ### Recommended next checks
 
 - Confirm generated Mermaid diagrams match the real architecture.
-- Confirm detected routes are public APIs, internal handlers, or framework conventions.
+- Confirm detected routes and runtime flows are public APIs, internal handlers, or framework conventions.
 - Add owner/team, service name, and strictness to `code-docs.yml` for stable CI behavior.
 """
 
