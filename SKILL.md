@@ -25,7 +25,8 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Prefer existing manifest files and source structure over guesses.
    - Run `scripts/inventory_repo.py <repo> --out <repo>/docs/code-doc-inventory.json` when no better local inventory tool exists.
    - Read build files, route/API declarations, package manifests, schema/migration folders, IaC, deployment files, and existing docs.
-   - Detect first-pass runtime flows from routes into handler/service/repository/data hints when code structure makes that visible.
+   - Detect runtime flows from routes into handler/service/repository/data hints when code structure makes that visible.
+   - Prefer Python AST-backed analysis for FastAPI/Flask-style routes and structured TypeScript/JavaScript symbol resolution for Express/Fastify-style handlers.
    - Exclude generated/vendor directories such as `node_modules`, `dist`, `build`, `.git`, `.next`, `target`, `vendor`, and lockfile-only noise.
 
 3. Infer system boundaries.
@@ -130,6 +131,7 @@ Generated documentation must:
 - show useful Mermaid diagrams for both structure and behavior in non-trivial systems
 - document how to build, test, deploy, configure, and observe the system when the repo contains that information
 - expose route-to-code runtime flows when handlers and downstream calls are visible
+- prefer AST-backed or structured analyzers over raw regex windows when available
 - separate facts proven by code from assumptions
 - be stable enough that repeated runs do not create meaningless diffs
 

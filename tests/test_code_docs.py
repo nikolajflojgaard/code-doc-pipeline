@@ -80,6 +80,64 @@ class CodeDocsTests(unittest.TestCase):
         run(["git", "commit", "-m", "initial"], repo)
         return repo
 
+    def make_named_handler_node_api_repo(self, tmp_root: Path) -> Path:
+        repo = tmp_root / "named-handler-node-api"
+        repo.mkdir()
+        (repo / "package.json").write_text('{"dependencies":{"express":"^5.0.0","prisma":"^6.0.0"}}\n')
+        (repo / "src").mkdir()
+        (repo / "src" / "server.ts").write_text(
+            "import express from 'express';\n"
+            "import { listOrders } from './services/orders';\n"
+            "const app = express();\n"
+            "app.get('/orders', getOrders);\n"
+            "function getOrders(_req, res) {\n"
+            "  const orders = listOrders();\n"
+            "  res.json(orders);\n"
+            "}\n"
+        )
+        (repo / "src" / "services").mkdir()
+        (repo / "src" / "services" / "orders.ts").write_text(
+            "export function listOrders() {\n"
+            "  return prisma.order.findMany();\n"
+            "}\n"
+        )
+        run(["git", "init"], repo)
+        run(["git", "config", "user.email", "test@example.com"], repo)
+        run(["git", "config", "user.name", "Test User"], repo)
+        run(["git", "add", "."], repo)
+        run(["git", "commit", "-m", "initial"], repo)
+        return repo
+
+    def make_python_api_repo(self, tmp_root: Path) -> Path:
+        repo = tmp_root / "python-api"
+        repo.mkdir()
+        (repo / "requirements.txt").write_text("fastapi\n")
+        (repo / "app.py").write_text(
+            "from fastapi import FastAPI\n"
+            "from services.customers import list_customers\n"
+            "app = FastAPI()\n"
+            "@app.get('/customers')\n"
+            "def get_customers():\n"
+            "    return list_customers()\n"
+        )
+        (repo / "services").mkdir()
+        (repo / "services" / "customers.py").write_text(
+            "from repositories.customers import customer_repository\n"
+            "def list_customers():\n"
+            "    return customer_repository.find_many()\n"
+        )
+        (repo / "repositories").mkdir()
+        (repo / "repositories" / "customers.py").write_text(
+            "def customer_repository():\n"
+            "    return db.query('customers')\n"
+        )
+        run(["git", "init"], repo)
+        run(["git", "config", "user.email", "test@example.com"], repo)
+        run(["git", "config", "user.name", "Test User"], repo)
+        run(["git", "add", "."], repo)
+        run(["git", "commit", "-m", "initial"], repo)
+        return repo
+
     def test_generate_creates_docs_and_diagrams(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
@@ -122,6 +180,32 @@ class CodeDocsTests(unittest.TestCase):
             sequence = (repo / "docs" / "diagrams" / "critical-sequence.mmd").read_text()
             self.assertIn("GET /customers", sequence)
             self.assertIn("listCustomers", sequence)
+
+    def test_detects_named_handler_runtime_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_named_handler_node_api_repo(Path(tmp))
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
+            flow = inventory["flows"][0]
+            self.assertEqual(flow["entrypoint"], "getOrders")
+            self.assertIn("listOrders", flow["calls"])
+            self.assertIn("prisma", flow["data_hints"])
+            self.assertEqual(flow["analyzer"], "typescript-structured")
+
+    def test_python_ast_runtime_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_python_api_repo(Path(tmp))
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
+            self.assertEqual(inventory["routes"][0]["path"], "/customers")
+            flow = inventory["flows"][0]
+            self.assertEqual(flow["entrypoint"], "get_customers")
+            self.assertEqual(flow["analyzer"], "python-ast")
+            self.assertEqual(flow["confidence"], "ast")
+            self.assertIn("list_customers", flow["calls"])
+            self.assertIn("db", flow["data_hints"])
 
     def test_config_can_change_docs_dir_and_excludes(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -35,8 +35,8 @@
 
 ## Detected Runtime Flows
 
-- `GET /health` in `src/server.ts` -> `inline handler`; calls: no downstream calls detected; data: no data hints detected
-- `POST /orders` in `src/server.ts` -> `inline handler`; calls: `acceptOrder`, `orderRepository`, `save`, `database`, `insert`; data: `repo`, `repository`, `save`, `database`
+- `GET /health` in `src/server.ts` -> `inline handler`; analyzer: `typescript-structured`; calls: no downstream calls detected; data: no data hints detected
+- `POST /orders` in `src/server.ts` -> `inline handler`; analyzer: `typescript-structured`; calls: `acceptOrder`, `orderRepository`, `save`, `database`, `insert`; data: `repo`, `repository`, `save`, `database`
 
 
 ## Unknowns

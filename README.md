@@ -12,7 +12,8 @@ The point is not to dump a repo tree into Markdown. The point is to keep documen
 - Document APIs, events, jobs, modules, deployment surfaces, and config
 - Separate observed facts from inferred behavior
 - Add pipeline checks so documentation drift is visible in pull requests
-- Extract first-pass runtime flows from routes into handler/service/repository/data hints
+- Extract runtime flows from routes into handler/service/repository/data hints
+- Use Python AST-backed route analysis and structured TypeScript/JavaScript symbol resolution
 - Preserve human-written context while refreshing generated sections
 
 ## Repository Layout
@@ -228,7 +229,7 @@ Bad generated documentation:
 
 ## Status
 
-Production baseline: includes an installable CLI, deterministic generation/check behavior, runtime-flow heuristics, stdlib tests, and GitHub Actions validation. Still designed to be adapted per repo rather than pretending one documentation generator can understand every architecture perfectly.
+Production baseline: includes an installable CLI, deterministic generation/check behavior, Python AST-backed flow analysis, structured TypeScript/JavaScript flow resolution, stdlib tests, and GitHub Actions validation. Still designed to be adapted per repo rather than pretending one documentation generator can understand every architecture perfectly.
 
 ## License
 

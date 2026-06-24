@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -262,11 +263,93 @@ def detect_frameworks(root: Path, files: list[dict[str, object]]) -> list[dict[s
     return [detected[name] for name in sorted(detected)]
 
 
-def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str, str]]:
+def ast_call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        current = node
+        while isinstance(current, ast.Attribute):
+            current = current.value
+        if isinstance(current, ast.Name) and current.id.lower() not in CALL_STOP_WORDS:
+            return current.id
+        return node.attr
+    return None
+
+
+def ast_route_from_decorator(decorator: ast.AST) -> tuple[str, str] | None:
+    if not isinstance(decorator, ast.Call):
+        return None
+    func = decorator.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    if func.attr not in {"get", "post", "put", "patch", "delete"}:
+        return None
+    owner = func.value
+    if not isinstance(owner, ast.Name) or owner.id not in {"app", "router"}:
+        return None
+    if not decorator.args or not isinstance(decorator.args[0], ast.Constant) or not isinstance(decorator.args[0].value, str):
+        return None
+    return func.attr.upper(), decorator.args[0].value
+
+
+def ast_function_calls(function: ast.AST) -> list[str]:
+    calls: list[str] = []
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call):
+            name = ast_call_name(node.func)
+            if name and name.lower() not in CALL_STOP_WORDS and name not in calls:
+                calls.append(name)
+    return calls[:12]
+
+
+def python_ast_routes_and_symbols(
+    root: Path,
+    files: list[dict[str, object]],
+) -> tuple[list[dict[str, str]], dict[str, tuple[list[str], list[str]]]]:
     routes: list[dict[str, str]] = []
+    symbols: dict[str, tuple[list[str], list[str]]] = {}
+
+    for item in files:
+        if "test" in item["tags"]:
+            continue
+        path = root / str(item["path"])
+        if path.suffix.lower() != ".py":
+            continue
+        text = read_text(path)
+        if not text:
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            calls = ast_function_calls(node)
+            data_hints = extract_data_hints(" ".join([node.name, *calls]))
+            symbols[node.name] = (calls, data_hints)
+            for decorator in node.decorator_list:
+                route = ast_route_from_decorator(decorator)
+                if route:
+                    method, route_path = route
+                    routes.append(
+                        {
+                            "framework": "FastAPI/Flask",
+                            "method": method,
+                            "path": route_path,
+                            "source": str(item["path"]),
+                            "entrypoint": node.name,
+                        }
+                    )
+
+    return routes, symbols
+
+
+def extract_routes(root: Path, files: list[dict[str, object]]) -> list[dict[str, str]]:
+    routes, _python_symbols = python_ast_routes_and_symbols(root, files)
     patterns = [
         ("Express/Fastify", re.compile(r"\b(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)")),
-        ("FastAPI/Flask", re.compile(r"@(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)")),
         ("Spring", re.compile(r"@(GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|RequestMapping)\s*\(\s*(?:value\s*=\s*)?['\"]([^'\"]+)")),
     ]
 
@@ -408,10 +491,41 @@ def expand_calls_and_data(calls: list[str], data_hints: list[str], symbols: dict
     return expanded_calls[:12], expanded_data[:8]
 
 
+def expand_python_calls_and_data(
+    calls: list[str],
+    data_hints: list[str],
+    symbols: dict[str, tuple[list[str], list[str]]],
+) -> tuple[list[str], list[str]]:
+    expanded_calls = list(calls)
+    expanded_data = list(data_hints)
+    queue = list(calls)
+    seen = set(queue)
+
+    for _ in range(2):
+        next_queue: list[str] = []
+        for call in queue:
+            symbol = symbols.get(call)
+            if not symbol:
+                continue
+            downstream_calls, downstream_data = symbol
+            for hint in downstream_data:
+                if hint not in expanded_data:
+                    expanded_data.append(hint)
+            for downstream in downstream_calls:
+                if downstream not in seen:
+                    seen.add(downstream)
+                    expanded_calls.append(downstream)
+                    next_queue.append(downstream)
+        queue = next_queue
+
+    return expanded_calls[:12], expanded_data[:8]
+
+
 def extract_flows(root: Path, files: list[dict[str, object]], routes: list[dict[str, str]]) -> list[dict[str, object]]:
     flows: list[dict[str, object]] = []
     routes_by_source: dict[str, list[dict[str, str]]] = {}
     symbols = symbol_windows(root, files)
+    _python_routes, python_symbols = python_ast_routes_and_symbols(root, files)
     for route in routes:
         routes_by_source.setdefault(route["source"], []).append(route)
 
@@ -422,6 +536,24 @@ def extract_flows(root: Path, files: list[dict[str, object]], routes: list[dict[
             continue
 
         for route in source_routes:
+            if path.suffix.lower() == ".py" and route.get("entrypoint"):
+                entrypoint = route["entrypoint"]
+                calls, data_hints = python_symbols.get(entrypoint, ([], []))
+                calls, data_hints = expand_python_calls_and_data(calls, data_hints, python_symbols)
+                flows.append(
+                    {
+                        "route": f"{route['method']} {route['path']}",
+                        "framework": route["framework"],
+                        "source": source,
+                        "entrypoint": entrypoint,
+                        "calls": [call for call in calls if call != entrypoint],
+                        "data_hints": data_hints,
+                        "confidence": "ast",
+                        "analyzer": "python-ast",
+                    }
+                )
+                continue
+
             escaped_path = re.escape(route["path"])
             method = route["method"].lower()
             if route["framework"] == "Spring":
@@ -447,6 +579,7 @@ def extract_flows(root: Path, files: list[dict[str, object]], routes: list[dict[
             if entrypoint and entrypoint in symbols and entrypoint not in calls:
                 calls.insert(0, entrypoint)
             calls, data_hints = expand_calls_and_data(calls, extract_data_hints(window), symbols)
+            calls = [call for call in calls if call != entrypoint]
             flows.append(
                 {
                     "route": f"{route['method']} {route['path']}",
@@ -456,6 +589,7 @@ def extract_flows(root: Path, files: list[dict[str, object]], routes: list[dict[
                     "calls": calls,
                     "data_hints": data_hints,
                     "confidence": "heuristic",
+                    "analyzer": "typescript-structured" if path.suffix.lower() in {".ts", ".tsx", ".js", ".jsx", ".mjs"} else "regex-window",
                 }
             )
 

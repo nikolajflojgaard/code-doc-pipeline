@@ -60,6 +60,7 @@
   ],
   "flows": [
     {
+      "analyzer": "typescript-structured",
       "calls": [],
       "confidence": "heuristic",
       "data_hints": [],
@@ -69,6 +70,7 @@
       "source": "src/server.ts"
     },
     {
+      "analyzer": "typescript-structured",
       "calls": [
         "acceptOrder",
         "orderRepository",

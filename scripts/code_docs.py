@@ -190,8 +190,9 @@ def flow_lines(inventory: dict[str, object]) -> str:
     for flow in flows[:50]:
         calls = ", ".join(f"`{call}`" for call in flow.get("calls", [])[:6]) or "no downstream calls detected"
         data = ", ".join(f"`{hint}`" for hint in flow.get("data_hints", [])[:4]) or "no data hints detected"
+        analyzer = flow.get("analyzer", flow.get("confidence", "heuristic"))
         lines.append(
-            f"- `{flow['route']}` in `{flow['source']}` -> `{flow['entrypoint']}`; calls: {calls}; data: {data}"
+            f"- `{flow['route']}` in `{flow['source']}` -> `{flow['entrypoint']}`; analyzer: `{analyzer}`; calls: {calls}; data: {data}"
         )
     if len(flows) > 50:
         lines.append(f"- ...and {len(flows) - 50} more")
