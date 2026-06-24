@@ -172,6 +172,17 @@ def framework_lines(inventory: dict[str, object]) -> str:
     return "".join(f"- `{item['name']}` from `{item['source']}`\n" for item in frameworks)
 
 
+def diagram_links() -> str:
+    diagrams = [
+        ("Context diagram", "context.mmd"),
+        ("Container or flow diagram", "container-or-flow.mmd"),
+        ("Critical sequence diagram", "critical-sequence.mmd"),
+        ("Data-flow diagram", "data-flow.mmd"),
+        ("Deployment diagram", "deployment.mmd"),
+    ]
+    return "\n".join(f"- {label}: [`diagrams/{name}`](diagrams/{name})" for label, name in diagrams)
+
+
 def route_lines(inventory: dict[str, object]) -> str:
     routes = inventory.get("routes", [])
     if not routes:
@@ -491,6 +502,10 @@ def generate(
 - Interfaces: [`interfaces.md`](interfaces.md)
 - Operations: [`operations.md`](operations.md)
 - Diagrams: [`diagrams/`](diagrams/)
+
+## Diagram Files
+
+{diagram_links()}
 """
     upsert_doc(docs_dir / "README.md", "Repository Documentation", overview)
 

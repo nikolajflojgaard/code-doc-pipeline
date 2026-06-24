@@ -73,6 +73,7 @@ Diagrams are a default output, not a bonus. For any non-trivial codebase, produc
    - Remove obvious restatements of filenames.
    - Prefer short explanations tied to concrete code paths.
    - Link to source files, schemas, routes, config, migrations, and deployment files.
+   - Link directly to generated Mermaid `.mmd` diagram files from the docs index, not only to the diagram folder.
    - Include open questions when the code is ambiguous.
    - Keep secrets, internal tokens, credentials, and private customer data out of generated docs.
 

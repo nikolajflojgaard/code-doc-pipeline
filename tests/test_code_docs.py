@@ -149,6 +149,9 @@ class CodeDocsTests(unittest.TestCase):
             self.assertTrue((repo / "docs" / "operations.md").exists())
             self.assertTrue((repo / "docs" / "diagrams" / "context.mmd").exists())
             self.assertTrue((repo / "docs" / "diagrams" / "critical-sequence.mmd").exists())
+            readme = (repo / "docs" / "README.md").read_text()
+            self.assertIn("[`diagrams/context.mmd`](diagrams/context.mmd)", readme)
+            self.assertIn("[`diagrams/critical-sequence.mmd`](diagrams/critical-sequence.mmd)", readme)
 
             inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
             self.assertEqual(inventory["counts"]["manifests"], 2)
