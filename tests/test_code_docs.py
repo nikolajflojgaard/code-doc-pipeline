@@ -229,6 +229,21 @@ class CodeDocsTests(unittest.TestCase):
             inventory = json.loads((repo / "generated-docs" / "generated" / "code-doc-inventory.json").read_text())
             self.assertEqual(inventory["counts"]["routes"], 0)
 
+    def test_config_can_pin_repository_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_node_api_repo(Path(tmp))
+            (repo / "code-docs.yml").write_text(
+                "repository_name: stable-repo\n"
+                "service_name: Stable Service\n"
+                "owner: platform\n"
+            )
+            run([sys.executable, str(CODE_DOCS), "generate", str(repo)], ROOT)
+
+            readme = (repo / "docs" / "README.md").read_text()
+            self.assertIn("- Repository: `stable-repo`", readme)
+            inventory = json.loads((repo / "docs" / "generated" / "code-doc-inventory.json").read_text())
+            self.assertEqual(inventory["repo"], "stable-repo")
+
     def test_strict_check_requires_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_node_api_repo(Path(tmp))

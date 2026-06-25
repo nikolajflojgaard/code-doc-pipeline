@@ -30,6 +30,7 @@ KNOWN_CONFIG_KEYS = {
     "exclude",
     "max_files",
     "owner",
+    "repository_name",
     "required_diagrams",
     "service_name",
     "strict",
@@ -114,7 +115,7 @@ def validate_config(config: dict[str, object]) -> list[str]:
         errors.append(f"Unknown config key: {key}")
     if "max_files" in config and int(config["max_files"]) <= 0:
         errors.append("max_files must be greater than 0")
-    for key in ("docs_dir", "service_name", "owner"):
+    for key in ("docs_dir", "service_name", "owner", "repository_name"):
         if key in config and not str(config[key]).strip():
             errors.append(f"{key} must not be empty")
     for diagram in as_list(config.get("required_diagrams", [])):
@@ -467,7 +468,12 @@ def generate(
     except ValueError:
         pass
 
-    inventory = collect_inventory(repo, max_files=max_files, exclude=effective_exclude)
+    inventory = collect_inventory(
+        repo,
+        max_files=max_files,
+        exclude=effective_exclude,
+        repo_name=str(config["repository_name"]) if config.get("repository_name") else None,
+    )
     generated_dir = docs_dir / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
     write_text(generated_dir / "code-doc-inventory.json", json.dumps(inventory, indent=2, sort_keys=True))
@@ -634,7 +640,12 @@ def command_check(args: argparse.Namespace) -> int:
 def command_review(args: argparse.Namespace) -> int:
     args = merge_config(args)
     repo = Path(args.repo).resolve()
-    inventory = collect_inventory(repo, max_files=args.max_files, exclude=args.exclude)
+    inventory = collect_inventory(
+        repo,
+        max_files=args.max_files,
+        exclude=args.exclude,
+        repo_name=str(args.config_data["repository_name"]) if args.config_data.get("repository_name") else None,
+    )
     report = render_review_report(inventory, args.config_data)
     print(report)
     if args.report:

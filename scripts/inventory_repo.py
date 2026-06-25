@@ -17,6 +17,7 @@ DEFAULT_EXCLUDES = {
     ".svn",
     ".idea",
     ".vscode",
+    ".husky",
     ".next",
     ".nuxt",
     ".astro",
@@ -602,6 +603,7 @@ def collect_inventory(
     *,
     max_files: int = 5000,
     exclude: list[str] | None = None,
+    repo_name: str | None = None,
 ) -> dict[str, object]:
     root = Path(repo).resolve()
     excludes = DEFAULT_EXCLUDES | set(exclude or [])
@@ -650,7 +652,7 @@ def collect_inventory(
     flows = extract_flows(root, files, routes)
 
     return {
-        "repo": root.name,
+        "repo": repo_name or root.name,
         "root": ".",
         "truncated": truncated,
         "counts": {
